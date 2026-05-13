@@ -272,3 +272,52 @@ func TestGarbageCollector_once_noSandboxes(t *testing.T) {
 	gc.once()
 	assert.Empty(t, fs.deleted)
 }
+
+func TestGarbageCollector_once_listInactiveErrorReturnsEarly(t *testing.T) {
+	// When ListInactiveSandboxes fails, once() should return early and NOT
+	// process expired sandboxes. Before the fix, it would fall through and
+	// still delete expired sandboxes with partial data.
+	now := time.Now()
+	fs := &gcFakeStore{
+		inactiveErr: fmt.Errorf("store connection lost"),
+		expired: []*types.SandboxInfo{
+			{
+				SessionID:        "session-expired",
+				Kind:             types.SandboxKind,
+				Name:             "sb-expired",
+				SandboxNamespace: "default",
+				ExpiresAt:        now.Add(-time.Hour),
+			},
+		},
+	}
+	gc := newTestGC(fs)
+	gc.once()
+
+	// No sandboxes should be deleted because the GC returned early
+	assert.Empty(t, fs.deleted, "GC should not delete anything when ListInactiveSandboxes fails")
+}
+
+func TestGarbageCollector_once_listExpiredErrorReturnsEarly(t *testing.T) {
+	// When ListExpiredSandboxes fails, once() should return early and NOT
+	// proceed to delete any sandboxes (including inactive ones already fetched).
+	now := time.Now()
+	fs := &gcFakeStore{
+		inactive: []*types.SandboxInfo{
+			{
+				SessionID:        "session-inactive",
+				Kind:             types.SandboxKind,
+				Name:             "sb-inactive",
+				SandboxNamespace: "default",
+				IdleTimeout:      metav1.Duration{Duration: 15 * time.Minute},
+				LastActivityAt:   now.Add(-20 * time.Minute),
+			},
+		},
+		expiredErr: fmt.Errorf("store connection lost"),
+	}
+	gc := newTestGC(fs)
+	gc.once()
+
+	// No sandboxes should be deleted because the GC returned early
+	assert.Empty(t, fs.deleted, "GC should not delete anything when ListExpiredSandboxes fails")
+}
+

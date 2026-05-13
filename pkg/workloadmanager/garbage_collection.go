@@ -84,6 +84,7 @@ func (gc *garbageCollector) once() {
 	candidates, err := gc.storeClient.ListInactiveSandboxes(ctx, now.Add(-gcMinInactiveLookback), gcCandidateLimit)
 	if err != nil {
 		klog.Errorf("garbage collector error listing inactive sandboxes: %v", err)
+		return
 	}
 
 	// Apply per-sandbox idle timeout: only include sandboxes whose own IdleTimeout
@@ -108,6 +109,7 @@ func (gc *garbageCollector) once() {
 	expiredSandboxes, err := gc.storeClient.ListExpiredSandboxes(ctx, now, gcCandidateLimit)
 	if err != nil {
 		klog.Errorf("garbage collector error listing expired sandboxes: %v", err)
+		return
 	}
 	gcSandboxes := make([]*types.SandboxInfo, 0, len(inactiveSandboxes)+len(expiredSandboxes))
 	gcSandboxes = append(gcSandboxes, inactiveSandboxes...)
